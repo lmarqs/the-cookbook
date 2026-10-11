@@ -320,6 +320,17 @@ so without its floor, finds out.
   each imported rule for review, and adoption reports the keys under [Adoption](#adoption) as notes. Before a session
   is left alone, check that none of them widens or narrows what it needs.
 
+### An attempt follows the person's own plugins and instructions
+
+- **Symptom.** The same task runs differently in attempts started on two machines.
+- **Why.** A headless Claude Code session loads the same context as an interactive one, including the person's own
+  settings, plugins, hooks and instructions under `~/.claude`, unless it is started with `--bare`
+  ([headless runs](https://code.claude.com/docs/en/headless.md), checked against 2.1.296).
+- **What the ingredient does.** Nothing: the person's own configuration is theirs, and it applies in the attempts
+  `the-cook` starts for them
+  ([ADR 0028](https://github.com/lmarqs/the-cook/blob/main/docs/adrs/0028-place-of-the-tool.md)). A worker declared
+  with a jail starts without the person's home, so only what the jail's options let through reaches it.
+
 ### Project settings apply only in a trusted folder
 
 - **Symptom.** In a session with a person, every command prompts, the project's hooks do not run, or Claude Code does
