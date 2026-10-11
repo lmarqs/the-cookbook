@@ -86,7 +86,8 @@ workspaces:
 ```
 
 - `modules.hooks` renders the worker hooks: post-edit feedback and `when` entries of standing context for every
-  worker. Codex runs them only after a person has reviewed them ([codex pitfalls](../ingredients/codex.md#hooks-run-only-after-a-person-reviews-them)).
+  worker. Codex runs them only after a person has reviewed them
+  ([codex pitfalls](../ingredients/codex.md#hooks-run-only-after-a-person-reviews-them)).
 - `modules.verify` turns on `./cook verify`, its receipt and the
   [`completed` guard](https://github.com/lmarqs/the-cook/blob/main/docs/features/tasks.md#the-completed-guard), so the
   `completed` action closes a bead only after its checks pass.
