@@ -1,0 +1,73 @@
+schema: 1
+name: codex
+version: v0.1.0
+description: Codex CLI, OpenAI's coding agent
+contract: { name: worker, version: 1 }
+checks:
+  version: { run: [codex, --version], range: ">=0.160 <0.161" }
+  detect: [.codex/]
+floor:
+  bypass:
+    - --dangerously-bypass-approvals-and-sandbox
+    - --yolo
+    - danger-full-access
+    - --sandbox=danger-full-access
+    - -s=danger-full-access
+    - -sdanger-full-access
+    - sandbox_mode=danger-full-access
+    - sandbox_mode="danger-full-access"
+    - --ignore-rules
+    - --dangerously-bypass-hook-trust
+operations:
+  launch:
+    command: [codex, exec]
+    unattended:
+      - -c
+      - sandbox_mode="workspace-write"
+      - -c
+      - sandbox_workspace_write.network_access=true
+      - -c
+      - approval_policy="never"
+    sandbox_roots: [--add-dir, "{path}"]
+    model: [-c, 'model="{model}"']
+    effort: [-c, 'model_reasoning_effort="{effort}"']
+    prompt: { stdin: true, args: [] }
+  payload:
+    event: hook_event_name
+    session: session_id
+    tool: tool_name
+    cwd: cwd
+    prompt: prompt
+    message: last_assistant_message
+    edit_tools: [apply_patch]
+    read_tools: []
+    events:
+      session-start: SessionStart
+      post-tool-use: PostToolUse
+      prompt-submit: UserPromptSubmit
+      turn-end: Stop
+  skills: .codex/skills/the-cook
+  native_rules:
+    project: [.codex/config.toml]
+    user: [~/.codex/config.toml]
+    notes: [approval_policy, sandbox_mode, sandbox_workspace_write]
+renders:
+  - file: .codex/rules/the-cook.rules
+    whole: true
+    template: files/the-cook.rules
+  - file: .codex/hooks.json
+    entries:
+      "hooks.{{event}}":
+        each: hooks
+        item:
+          matcher: "{{matcher}}"
+          hooks:
+            - { type: command, command: "{{command}}" }
+  - file: .codex/hooks.json
+    entries:
+      "hooks.{{event}}":
+        each: raw
+        item:
+          matcher: "{{matcher}}"
+          hooks:
+            - { type: command, command: "{{run}}" }

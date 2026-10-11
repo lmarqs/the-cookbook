@@ -1,0 +1,77 @@
+schema: 1
+name: claude
+version: v0.1.0
+description: Claude Code, Anthropic's coding agent
+contract: { name: worker, version: 1 }
+checks:
+  version: { run: [claude, --version], range: ">=2.1.292 <2.2" }
+  detect: [.claude/, CLAUDE.md]
+floor:
+  bypass:
+    - --dangerously-skip-permissions
+    - --allow-dangerously-skip-permissions
+    - bypassPermissions
+    - --permission-mode=bypassPermissions
+operations:
+  launch:
+    command: [claude, --print]
+    unattended: [--permission-mode, auto, --permission-prompts, none]
+    unattended_deny:
+      flag: --disallowedTools
+      item: &rule "{{#prefix}}Bash({{words}} *){{/prefix}}{{#native}}{{string}}{{/native}}{{#bare}}Bash({{string}}){{/bare}}"
+    model: [--model, "{model}"]
+    effort: [--effort, "{effort}"]
+    prompt: { stdin: true, args: [] }
+  payload:
+    event: hook_event_name
+    session: session_id
+    tool: tool_name
+    file: tool_input.file_path
+    cwd: cwd
+    prompt: prompt
+    message: message
+    edit_tools: [Edit, Write, MultiEdit]
+    read_tools: [Read]
+    events:
+      session-start: SessionStart
+      post-tool-use: PostToolUse
+      prompt-submit: UserPromptSubmit
+      attention: Notification
+      turn-end: Stop
+  instructions: { file: CLAUDE.md, block: import, line: "@AGENTS.md" }
+  skills: .claude/skills/the-cook
+  native_rules:
+    patterns: ['^[A-Z][A-Za-z]*(\(.*\))?$', '^mcp__.*$']
+    keys: { allow: permissions.allow, ask: permissions.ask, deny: permissions.deny }
+    project: [.claude/settings.json]
+    local: [.claude/settings.local.json]
+    user: [~/.claude/settings.json]
+    prefix: "Bash({{words}} *)"
+    notes:
+      - permissions.defaultMode
+      - permissions.additionalDirectories
+      - permissions.disableBypassPermissionsMode
+      - autoMode
+      - sandbox
+renders:
+  - file: .claude/settings.json
+    keys:
+      permissions.allow: { each: allow, item: *rule }
+      permissions.ask: { each: ask, item: *rule }
+      permissions.deny: { each: deny, item: *rule }
+  - file: .claude/settings.json
+    entries:
+      "hooks.{{event}}":
+        each: hooks
+        item:
+          matcher: "{{matcher}}"
+          hooks:
+            - { type: command, command: "{{command}}" }
+  - file: .claude/settings.json
+    entries:
+      "hooks.{{event}}":
+        each: raw
+        item:
+          matcher: "{{matcher}}"
+          hooks:
+            - { type: command, command: "{{run}}" }

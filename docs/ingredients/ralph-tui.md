@@ -90,7 +90,8 @@ writes the block, and `./cook render --check` reports an edit to it.
 - **Symptom.** With a plugin's defaults, ralph-tui starts Claude Code with `--dangerously-skip-permissions` and Codex
   with `--full-auto`.
 - **Why.** The `claude` plugin's `skipPermissions` option and the `codex` plugin's `fullAuto` option default to `true`,
-  and the plugin adds those arguments after `defaultFlags`.
+  and the plugin adds those arguments after `defaultFlags`. Codex 0.160 rejects `--full-auto` as an unexpected
+  argument, so a `codex` agent with the plugin's defaults fails at the first task.
 - **What the ingredient does.** Nothing. The station's per-task command drops every argument the plugin adds. A command
   that forwards them to `the-cook` has each argument the worker's ingredient marks as a floor bypass refused at the
   first task ([the floor](https://github.com/lmarqs/the-cook/blob/main/docs/features/ingredients.md#the-floor)).
