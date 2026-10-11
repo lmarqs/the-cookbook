@@ -1,17 +1,17 @@
 # agentic-coding
 
 The `agentic-coding` station sets a repository up to run its lifecycle with two coding agents on git: Claude Code in
-sessions with a person, and Codex unattended, which ralph-tui starts for each ready bead of a Beads epic as one run of
-the [`implement-task`](../recipes/implement-task.md) recipe. Applying it is one reviewed diff, and from then on every
-entry and file it wrote is the repository's own.
+sessions with a person, and Codex unattended, in a loop run where ralph-tui makes each ready bead of a Beads epic one
+run of the [`implement-task`](../recipes/implement-task.md) recipe. Applying it is one reviewed diff, and from then on
+every entry and file it wrote is the repository's own.
 
 ## What it sets up
 
 | Part | What applying writes |
 | --- | --- |
 | Ingredients | pins of `git`, `claude`, `codex`, `ralph-tui` and `beads` |
-| Stages | `vcs: git`; the workers `claude`, interactive, and `codex`, unattended |
-| Entries | the `hooks` and `verify` modules, a validator, a standing-context entry, the unattended denies, three tracker actions |
+| Stages | `vcs: git`; the workers `claude`, interactive, and `codex`, unattended, with the network |
+| Entries | the `hooks` and `verify` modules, a validator, a standing-context entry, `workspaces.update_before_landed`, the unattended denies, three tracker actions |
 | Templates | `.ralph-tui/config.toml`, `.ralph-tui/templates/beads.hbs` and `.agents/directives/unattended.md` |
 | Recipes | `implement-task`, copied into `.cook/recipes/implement-task/` |
 | Detect rule | `.beads/`, `.ralph-tui/` |
@@ -20,8 +20,9 @@ A task goes like this. ralph-tui, started in the primary checkout, takes the nex
 prompt from the station's prompt template and runs the command the configuration names. That command reads the bead's
 id from the prompt's first line and runs
 `./cook make implement-task --task <id> --unattended --commit --withhold '<promise>COMPLETE</promise>'` with the
-prompt on stdin. The run creates the workspace `task-<id>` on `work/task-<id>` from the default branch, where `start`
-claims the bead; its `attempt` step starts Codex on the prompt under the attempt contract; then the run verifies the
+prompt on stdin. The run creates the workspace `task-<id>` on `work/task-<id>` from `origin/<default branch>` as the
+clone last fetched it, where `start` claims the bead; its `attempt` step starts Codex on the prompt, with the
+station's directive before the task's text, under the attempt contract; then the run verifies the
 change itself, replays it from the base, commits it and fires `completed`, which closes the bead. Only then does
 `the-cook` print the completion tag, and ralph-tui counts the task done. A run that stops fires `blocked`, which marks
 the bead blocked with the reason, keeps its workspace for a person and exits non-zero, and ralph-tui skips the task for
@@ -51,7 +52,7 @@ already pins keeps the repository's pin, and the difference is reported
 vcs: git
 workers:
   claude: { ingredient: claude, role: interactive }
-  codex: { ingredient: codex, role: unattended }
+  codex: { ingredient: codex, role: unattended, network: true }
 ```
 
 - `claude` is `interactive`: people work with it in their sessions, under the shared policy and the floor of every
@@ -61,6 +62,10 @@ workers:
   ([roles](https://github.com/lmarqs/the-cook/blob/main/docs/features/workers.md#roles)).
 - Neither worker gets `writable_roots`: the worker of an attempt never writes the tracker, so `.beads/` stays outside
   its sandbox.
+- `codex` gets `network: true`, because the `implement-task` attempts install dependencies and run tests that need the
+  network. With `false`, Codex keeps an attempt's commands off the network
+  ([codex](../ingredients/codex.md#a-codex-attempt-cannot-reach-the-network)); a repository whose tasks need no
+  network sets `false`.
 - No `model` or `effort` is set. Add them under `workers.codex` to choose the model the attempts run with; ralph-tui's
   own model settings never reach the worker.
 
@@ -76,16 +81,24 @@ verify:
 context:
   always:
     - { file: .agents/directives/unattended.md, for: [unattended] }
+workspaces:
+  update_before_landed: true
 ```
 
-- `modules.hooks` renders the worker hooks: post-edit feedback for every worker, and the session-start hook that
-  delivers the directive to unattended sessions.
+- `modules.hooks` renders the worker hooks: post-edit feedback and `when` entries of standing context for every
+  worker. Codex runs them only after a person has reviewed them ([codex pitfalls](../ingredients/codex.md#hooks-run-only-after-a-person-reviews-them)).
 - `modules.verify` turns on `./cook verify`, its receipt and the
   [`completed` guard](https://github.com/lmarqs/the-cook/blob/main/docs/features/tasks.md#the-completed-guard), so the
   `completed` action closes a bead only after its checks pass.
 - The validator proves that a change to `.cook/` or `AGENTS.md` leaves the rendered files in step with it.
 - The `context` entry gives every unattended session the directive below, read from the base commit in an attempt, so a
-  worker cannot rewrite its own rules.
+  worker cannot rewrite its own rules. Each task's attempt receives it in its prompt, before the task's text, because
+  `./cook make implement-task` passes the prompt from ralph-tui's command to Codex on stdin
+  ([delivery in the prompt](https://github.com/lmarqs/the-cook/blob/main/docs/features/context.md#delivery-in-the-prompt)),
+  so it reaches Codex though Codex runs no project hook a person has not reviewed.
+- `workspaces.update_before_landed` makes `./cook workspace remove` run `git fetch origin` before it checks whether the
+  workspace's branch landed. The station's work lands through pull requests merged on the hosting platform, so the
+  workspace of a delivered task is removed as landed once the default branch holds it, without a fetch by hand first.
 
 ### `.cook/policy.yaml`
 

@@ -30,6 +30,16 @@ operations:
         elif git remote get-url origin >/dev/null 2>&1;
         then echo "refs/remotes/origin/HEAD is not set: run git remote set-head origin --auto" >&2; exit 1;
         else b=$(git config --get init.defaultBranch) && git show-ref --verify -q "refs/heads/$b" && echo "$b"; fi
+  default_revision:
+    run:
+      - sh
+      - -c
+      - >-
+        git rev-parse --git-dir >/dev/null || exit 1;
+        if ref=$(git symbolic-ref -q refs/remotes/origin/HEAD); then git rev-parse --verify "$ref^{commit}";
+        elif git remote get-url origin >/dev/null 2>&1;
+        then echo "refs/remotes/origin/HEAD is not set: run git remote set-head origin --auto" >&2; exit 1;
+        else b=$(git config --get init.defaultBranch) && git rev-parse --verify "refs/heads/$b^{commit}"; fi
   show: { run: [git, cat-file, blob, "{rev}:{path}"] }
   clean:
     run: [sh, -c, 'out=$(git status --porcelain --untracked-files=normal) && test -z "$out"']
@@ -65,6 +75,16 @@ operations:
   workspace_add:
     run: [git, -c, core.hooksPath=/dev/null, worktree, add, -b, "{branch}", "{path}", "{rev}"]
   workspace_remove: { run: [git, worktree, remove, "{path}"] }
+  metadata:
+    run:
+      - sh
+      - -c
+      - >-
+        top=$(git rev-parse --show-toplevel) && dir=$(git rev-parse --git-dir) &&
+        common=$(git rev-parse --git-common-dir) &&
+        top=$(cd "$top" && pwd -P) && dir=$(cd "$dir" && pwd -P) && common=$(cd "$common" && pwd -P) &&
+        printf '%s\n' "$dir" && { test "$common" = "$dir" || printf '%s\n' "$common"; } &&
+        { test ! -f "$top/.git" || printf '%s\n' "$top/.git"; }
 renders:
   - { file: .gitignore, block: state, template: "/{{state_dir}}/" }
   - { file: .gitignore, block: workspaces, template: "/{{workspaces_dir}}/" }

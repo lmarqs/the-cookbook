@@ -71,32 +71,44 @@ with its values as positional parameters, so no value reaches the shell's parser
 | `root` | `git rev-parse --show-toplevel` | the hook command |
 | `primary_root` | `git rev-parse --git-common-dir`, then the absolute path of its parent, through `sh` | the primary checkout from a workspace: `COOK_REPO` and the state shared by every workspace |
 | `branch` | `git branch --show-current` | `COOK_BRANCH`; the `deliver` guard, which refuses the default branch and no branch |
-| `default_branch` | the branch `refs/remotes/origin/HEAD` points to, without its prefix, through `sh` | `COOK_DEFAULT_BRANCH`; `{default_branch}` in the floor; the base of `verify` outside a workspace and of a recipe run; the default branch `scaffold` reports |
+| `default_branch` | the branch `refs/remotes/origin/HEAD` points to, without its prefix, through `sh` | `COOK_DEFAULT_BRANCH`; `{default_branch}` in the floor; the `deliver` guard against the default branch and the refusals of `deliver`; the default branch `scaffold` reports |
+| `default_revision` | the commit `refs/remotes/origin/HEAD` points at, through `sh`; with no `origin`, the commit of the local default branch | the base of a recipe run's workspace, and the commit the run reads its recipe, the profile, the policy and the hooks file from; the base of a `landed` `attempt` action's workspace; the `{target}` of `landed`; the start of a fleet delivery's branch; the merge base of `verify` outside a workspace |
 | `show` | `git cat-file blob {rev}:{path}` | reading the profile, the policy, the hooks file and the standing context from an attempt's base; the tamper check |
 | `clean` | `git status --porcelain --untracked-files=normal`, true when it prints nothing, through `sh` | an attempt refuses uncommitted changes; the `deliver` guard; `workspace remove`; a fleet refuses a dirty repository |
 | `tracked` | `git --literal-pathspecs ls-files --error-unmatch -- {path}` | the paths the ignore blocks leave out |
 | `changed` | `git diff --name-only --no-renames {rev} --`, then `git ls-files --others --exclude-standard`, both with `core.quotePath=false`, through `sh` | the changed files of `verify` |
 | `patch` | `git add --all --intent-to-add`, then `git diff --binary {rev} --` with fixed output options, through `sh` | `last-attempt.patch` of a failed attempt |
-| `merge_base` | `git merge-base {a} {b}` | the base of `verify` outside a workspace |
-| `landed` | `git cherry {target} {branch}`, keeping the commits marked `+`, through `sh` | `landed` in `workspace remove`; the landed branches `doctor` lists |
+| `merge_base` | `git merge-base {a} {b}` | the base of `verify` outside a workspace, against `default_revision` |
+| `landed` | `git cherry {target} {branch}`, keeping the commits marked `+`, through `sh` | `landed` in `workspace remove`; the landed branches `doctor` lists; both against `default_revision` |
 | `reset` | `git reset --hard {rev}`, then `git clean -fd`, through `sh` | returning a failed attempt's checkout to its base |
 | `commit` | `git add --all`, then `git commit -m {message}`, through `sh` | `--commit` of `the-cook attempt` and `the-cook make`; a fleet delivery |
-| `update` | `git fetch origin` | a fleet delivery, before its branch |
+| `update` | `git fetch origin` | a fleet delivery, before its branch; `workspace remove`, before it detects landed work, when the profile sets `workspaces.update_before_landed` |
 | `branch_create` | `git branch {branch} {rev}` | a fleet delivery's branch |
 | `switch` | `git switch {branch}` | a fleet delivery's branch |
 | `workspace_add` | `git -c core.hooksPath=/dev/null worktree add -b {branch} {path} {rev}` | `workspace create` and recipe runs: a linked worktree on `work/<name>` |
 | `workspace_remove` | `git worktree remove {path}` | `workspace remove` |
+| `metadata` | `git rev-parse --git-dir`, `--git-common-dir` and `--show-toplevel`, each made absolute with `cd` and `pwd -P`, through `sh` | the jail: the paths it shares read-only, so a worker in a jail cannot write the history, the configuration or the hooks under them |
+
+`default_revision` is what a recipe run starts from: the commit `origin/<default branch>` points at in this clone.
+Pushing the default branch from this clone moves it, a merge on the hosting platform moves it at the next
+`git fetch origin`, and a commit made only here never does. A run reads its recipe, the profile, the policy and the
+hooks file at that commit, so a recipe, a station's changes and an edit to the profile reach a new workspace only once
+they are pushed to the default branch on `origin` and this clone knows it. `./cook make <recipe> --here` runs a draft
+from the working tree of the managed workspace it is started in.
 
 What the forms guard against, each checked against git 2.43.0:
 
 - **Exit status.** A pipeline exits with the status of its last command, and `test` or `cd` with their own, whatever the
   command substitution in their arguments did, so a git failure would read as an answer:
   `test -z "$(git status --porcelain)"` is true outside a repository, and `git cherry main x | sed ...` reports every
-  commit as landed when `main` does not exist. `clean`, `landed`, `primary_root` and `default_branch` assign git's
-  output first and stop on its failure.
+  commit as landed when `main` does not exist. `clean`, `landed`, `primary_root`, `default_branch`, `default_revision`
+  and `metadata` assign git's output first and stop on its failure.
 - **`default_branch`.** It reads `refs/remotes/origin/HEAD`, which `git clone` records. When `origin` exists and that
   ref does not, it fails with `run git remote set-head origin --auto`. In a repository with no `origin` remote, it
   reports the local branch `init.defaultBranch` names, when that branch exists.
+- **`default_revision`** follows the same three cases as `default_branch`, and resolves the branch it finds with
+  `git rev-parse --verify "<ref>^{commit}"`, so a `refs/remotes/origin/HEAD` that names a branch the clone no longer
+  has fails instead of answering.
 - **`show`** runs the plumbing `git cat-file blob`, which prints a file's bytes as committed, never converted for
   display.
 - **`tracked`** passes the path with `--literal-pathspecs`, so a path with `*` or `[` is not read as a glob that
@@ -113,6 +125,14 @@ What the forms guard against, each checked against git 2.43.0:
   which git runs after `git worktree add`, does not run while the workspace is created. The repository's `bootstrap`
   prepares the workspace instead.
 - **`workspace_remove`** never forces: git refuses a worktree with uncommitted or untracked files, and a locked one.
+- **`metadata`** prints the git directory, the common directory when it differs, and the checkout's `.git` when it is a
+  file, each once: `.git` alone in a primary checkout; in a linked worktree, its directory under `.git/worktrees/`, the
+  common `.git` and the worktree's `.git` file. `--git-dir` and `--git-common-dir` print a relative path in some
+  checkouts, such as `.git` at the root of a primary one, and `git rev-parse --path-format=absolute` needs git 2.31, so
+  `cd` and `pwd -P` make each path absolute, with symlinks resolved as `root` resolves them, and the range keeps its
+  floor of 2.23. A hooks directory that `core.hooksPath` names inside the checkout, such as `.husky/`, is not among the
+  paths: it holds files of the checkout, which a worker changes like any other, and `commit` runs the hooks in it
+  ([Pitfalls](#your-git-configuration-applies-to-the-commits-the-binary-makes)).
 
 ## Floor
 
@@ -163,22 +183,26 @@ it. `ingredient list --cookbook` shows the ingredient as detected in every git r
 ### No default branch: `origin/HEAD` is not set
 
 - **Symptom.** `doctor` reports no default branch, so the floor cannot name the branch it protects, and a command that
-  needs the default branch stops; the operation prints `refs/remotes/origin/HEAD is not set`.
+  needs the default branch or its revision stops; both operations print `refs/remotes/origin/HEAD is not set`.
 - **Why.** `git clone` records the remote's default branch as `refs/remotes/origin/HEAD`. A repository whose remote was
   added by hand and then pushed or fetched has no such ref, and no setting of git 2.43 makes `git fetch` create or
   change it, so it also keeps naming a default branch the hosting platform renamed.
-- **What the ingredient does.** Reads the default branch from that ref whenever `origin` exists, and names the fix when
-  the ref is missing: run `git remote set-head origin --auto`, which asks the remote, then `./cook render`.
+- **What the ingredient does.** Reads the default branch and its revision from that ref whenever `origin` exists, and
+  names the fix when the ref is missing: run `git remote set-head origin --auto`, which asks the remote, then
+  `./cook render`.
 
-### The default branch is the local branch
+### A new workspace starts from what this clone last fetched
 
-- **Symptom.** After a `git fetch`, a branch merged on the hosting platform is not reported as landed, and a recipe
-  run's workspace or a fleet branch starts from an old commit.
-- **Why.** `default_branch` reports a name such as `main`, and git resolves `main` to the local branch
-  `refs/heads/main`, which moves only when you update it. `git fetch origin`, the `update` operation, moves
-  `origin/main` and leaves `main` where it is.
-- **What the ingredient does.** Uses the name as the binary passes it and never moves a local branch. Keep the local
-  default branch current where it is checked out, with `git pull --ff-only`.
+- **Symptom.** A recipe run's workspace lacks a change already merged, or a recipe, profile or hooks change committed
+  in this clone; `the-cook make` reports no recipe of that name; `workspace remove` fires no `landed` for a branch
+  merged on the hosting platform.
+- **Why.** `default_revision` is the commit `origin/<default branch>` points at in this clone. A push from this clone
+  moves it, a merge on the hosting platform moves it only at the next `git fetch origin`, and a commit on the local
+  default branch never does. `the-cook make`, `workspace create` and `doctor` never fetch.
+- **What the ingredient does.** Reads the remote-tracking branch, and fetches only in `update`: before a fleet
+  delivery's branch, and before `workspace remove` detects landed work when the profile sets
+  `workspaces.update_before_landed: true`, as the [agentic-coding](../stations/agentic-coding.md) station does. Push
+  what a run needs before it starts, and run `git fetch origin` when it must start from a merge made elsewhere.
 
 ### A squash merge hides landed work
 
@@ -214,11 +238,13 @@ it. `ingredient list --cookbook` shows the ingredient as detected in every git r
 
 ### Your git configuration applies to the commits the binary makes
 
-- **Symptom.** `the-cook attempt --commit` fails after its replay passed, or the commit holds content the replay did
-  not check.
+- **Symptom.** `the-cook attempt --commit` fails after its replay passed, the commit holds content the replay did
+  not check, or a hook a worker changed runs.
 - **Why.** `commit` runs `git commit`, which runs the repository's `pre-commit` and `commit-msg` hooks and signs when
   `commit.gpgSign` is set. A hook that fails stops the commit, a hook that rewrites files and stages them commits
-  content the replay did not check, and signing in an unattended run needs an agent that already holds the key.
+  content the replay did not check, and signing in an unattended run needs an agent that already holds the key. Where
+  `core.hooksPath` names a directory of the checkout, such as `.husky/`, the hooks that run are its files as the
+  worker left them, run by the binary outside any jail.
 - **What the ingredient does.** Commits with the repository's hooks and your settings, so the checks the repository
   requires of every commit apply. Only `workspace_add` turns hooks off, for that one command; `switch` runs
   `post-checkout`.
@@ -366,9 +392,9 @@ lifecycle:
       auto: true
 ```
 
-Actions run as child processes of `the-cook`, outside every worker's permissions, so the floor does not apply to
-them; the `deliver` guard refuses to run them on the default branch. `landed` fires for a recorded branch whose
-commits the `landed` operation finds on the default branch.
+Actions run as child processes of `the-cook`, outside every worker's permissions, so the floor does not apply to them;
+the `deliver` guard refuses to run them on the default branch. `landed` fires for a recorded branch whose commits the
+`landed` operation finds in `default_revision`, the default branch as this clone knows it.
 
 ### Record the default branch in a clone without it
 

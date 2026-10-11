@@ -25,10 +25,9 @@ operations:
       - -c
       - sandbox_mode="workspace-write"
       - -c
-      - sandbox_workspace_write.network_access=true
-      - -c
       - approval_policy="never"
     sandbox_roots: [--add-dir, "{path}"]
+    network: [-c, sandbox_workspace_write.network_access=true]
     model: [-c, 'model="{model}"']
     effort: [-c, 'model_reasoning_effort="{effort}"']
     prompt: { stdin: true, args: [] }

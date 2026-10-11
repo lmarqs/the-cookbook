@@ -27,7 +27,7 @@ stages:
   vcs: git
   workers:
     claude: { ingredient: claude, role: interactive }
-    codex: { ingredient: codex, role: unattended }
+    codex: { ingredient: codex, role: unattended, network: true }
 detect: [.beads/, .ralph-tui/]
 entries:
   .cook/config.yaml:
@@ -38,6 +38,8 @@ entries:
     context:
       always:
         - { file: .agents/directives/unattended.md, for: [unattended] }
+    workspaces:
+      update_before_landed: true
   .cook/policy.yaml:
     unattended:
       deny:

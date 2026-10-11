@@ -6,9 +6,9 @@ refuses the arguments that turn Codex's sandbox, its approvals or its rules off.
 
 ## What it describes
 
-- **Program.** The Codex CLI, the `codex` command, from 0.160 up to, not including, 0.161. Its arguments, its hook
-  events and their input, and its rule matching were checked against 0.160.1: the help, the hook input schemas the
-  binary carries, and `codex execpolicy check`.
+- **Program.** The Codex CLI, the `codex` command, from 0.160 up to, not including, 0.161. Its arguments, its
+  configuration keys, its hook events and their input, and its rule matching were checked against 0.160.1: the help,
+  the configuration fields and hook input schemas the binary carries, and `codex execpolicy check`.
 - **Contract.** The worker
   [contract](https://github.com/lmarqs/the-cook/blob/main/docs/features/ingredients.md#the-worker-contract), version 1.
   A worker uses the ingredient when its `ingredient` is `codex`, or when it is named `codex` and names none.
@@ -141,9 +141,10 @@ worker has and this file lacks is an entry Codex cannot express. Read `.codex/ho
 | Contract item | Filled with | What Codex does with it |
 | --- | --- | --- |
 | `launch.command` | `codex exec` | runs one prompt without its terminal interface |
-| `launch.unattended` | `-c sandbox_mode="workspace-write" -c sandbox_workspace_write.network_access=true -c approval_policy="never"` | the workspace-write sandbox, which reads anywhere and edits only the working directory and the writable roots; the network on; never asks for an approval, so a refused command goes back to the model as a failure |
+| `launch.unattended` | `-c sandbox_mode="workspace-write" -c approval_policy="never"` | the workspace-write sandbox, which reads anywhere and edits only the working directory and the writable roots; never asks for an approval, so a refused command goes back to the model as a failure |
 | `launch.unattended_deny` | not filled | takes no deny argument: `unattended.deny` reaches it through the rules file |
 | `launch.sandbox_roots` | `--add-dir <path>`, once per directory | makes the clone's state directory and each of `workers.<name>.writable_roots` writable beside the checkout |
+| `launch.network` | `-c sandbox_workspace_write.network_access=true`, for a worker declared with `network: true` | lets the commands the attempt runs in the sandbox reach the network |
 | `launch.model` | `-c model="<model>"` | the model id |
 | `launch.effort` | `-c model_reasoning_effort="<effort>"` | the reasoning effort |
 | `launch.prompt` | stdin | `codex exec` reads the prompt from stdin when no prompt argument is given |
@@ -155,8 +156,14 @@ worker has and this file lacks is an entry Codex cannot express. Read `.codex/ho
 The launch sets the sandbox, the approvals and the model as `-c` overrides, never as `--sandbox` or `--model`, for two
 reasons. Codex refuses an option such as `--sandbox`, `--model` or `--json` given twice, so a caller that passes its own
 does not break the launch. And a `-c` override replaces the value a `config.toml` would give, so neither the user's file
-nor the project's changes an attempt's sandbox or its approvals. The network stays on so that the tools a task runs,
-such as a package manager, reach what they need; the denies decide what the worker may run.
+nor the project's changes an attempt's sandbox or its approvals.
+
+The network is the repository's choice, `workers.<name>.network`. With `network: true` the launch adds
+`-c sandbox_workspace_write.network_access=true`, so the tools a task runs, such as a package manager or a test that
+downloads, reach what they need; the denies decide what the worker may run. With `network: false`, the default, the
+launch passes nothing about the network, and the attempt's commands have no network inside Codex's sandbox, which is
+Codex's default for `workspace-write`. A `config.toml` Codex reads that sets `sandbox_workspace_write.network_access`
+then decides instead, because no `-c` override replaces it.
 
 For a `codex` worker with `writable_roots: [.beads]`, an attempt starts with `--add-dir` for the clone's state
 directory and for `.beads` in the primary checkout; the policy entry `[git, push]` under `unattended.deny` is
@@ -177,6 +184,11 @@ are the checkout's uncommitted changes against its head commit, as the version-c
 reads files through shell commands, so the ingredient names no read tool. When a post-edit command or a validator fails,
 `the-cook hook` exits 2, and Codex passes the hook's stderr back to the model. `COOK_MESSAGE` on `turn_end` is the last
 message of the turn. The `turn_end` actions do nothing in an attempt, whose worker runs with `COOK_ATTEMPT=1`.
+
+In an attempt, `launch.prompt` passes the prompt on stdin, so the binary puts the `always` entries of the `unattended`
+role before the task's text and sets `COOK_CONTEXT_IN_PROMPT=1`, under which the session-start hook injects none of them
+([context](https://github.com/lmarqs/the-cook/blob/main/docs/features/context.md#delivery-in-the-prompt)). Those entries
+reach a Codex attempt whether or not its hooks run; `when` entries and post-edit commands come only through the hooks.
 
 ### Permission decisions
 
@@ -281,17 +293,20 @@ yours.
 
 ### Hooks run only after a person reviews them
 
-- **Symptom.** A Codex session or attempt gets no post-edit feedback and no standing context, and Codex reports that
-  hooks need review before they can run.
+- **Symptom.** A Codex session or attempt gets no post-edit feedback and no `when` entry of standing context, and Codex
+  reports that hooks need review before they can run.
 - **Why.** Codex runs hooks while its `hooks` feature is on, which `codex features list` shows, and runs a project hook
-  only once a person has reviewed it, asking again for a hook that is new or has changed since. It records each review,
-  with the hook's hash, in the user's configuration under `hooks.state`. Nobody reviews anything in an attempt.
-- **What the ingredient does.** Renders the same hook command on every render, so a review holds while the rendered
-  entries stay the same, and refuses `--dangerously-bypass-hook-trust`. Review the hooks with `/hooks` in a Codex
-  session started in the checkout. A workspace is a checkout of its own, with its own `.codex/hooks.json`: before a run,
-  start a Codex session in a workspace made with `./cook workspace create` and check with `/hooks` whether its hooks
-  show as trusted. A directive every Codex attempt must receive belongs in `AGENTS.md`, which Codex reads without a
-  hook, or in the task's prompt.
+  only once a person has reviewed it, asking again for a hook that is new or has changed since. It records each review
+  in the user's configuration under `hooks.state`, keyed by the absolute path of the `.codex/hooks.json` it read, with
+  the hook's hash. Nobody reviews anything in an attempt, and a workspace is a checkout of its own, with its own
+  `.codex/hooks.json` at a path of its own.
+- **What the ingredient does.** Passes the prompt on stdin, so the `always` entries of the `unattended` role reach every
+  attempt in its prompt without a hook ([Hook events](#hook-events)). Renders the same hook command on every render, so
+  a review holds while the rendered entries stay the same, and refuses `--dangerously-bypass-hook-trust`. Review the
+  project hooks once, with `/hooks` in an interactive Codex session started in the checkout you work in. A workspace
+  you create with `./cook workspace create` needs the same review in a session started there; a workspace a recipe run
+  creates is new for each task, so its attempt runs no project hook. Keep what every attempt must receive in an
+  `always` entry for the `unattended` role, and what it must pass in a lane the run verifies.
 
 ### Codex sessions never send `attention`
 
@@ -316,6 +331,15 @@ yours.
   state directory and `workers.codex.writable_roots`.
 - **What the ingredient does.** Passes `--add-dir` for each of them. Add the directory to `writable_roots`, relative to
   the primary checkout's root.
+
+### A Codex attempt cannot reach the network
+
+- **Symptom.** A dependency install or a test that downloads fails inside a Codex attempt, and passes in a session.
+- **Why.** The worker is declared with `network: false`, the default, so the launch says nothing about the network, and
+  Codex's workspace-write sandbox keeps the attempt's commands off it.
+- **What the ingredient does.** Passes `-c sandbox_workspace_write.network_access=true` only for a worker declared
+  with `network: true`. Set `workers.codex.network: true` when the attempts need the network, as the
+  [agentic-coding](../stations/agentic-coding.md#workers) station does.
 
 ### An attempt cannot fill `the-cook`'s cache
 
@@ -366,8 +390,10 @@ yours.
   `sandbox_workspace_write.writable_roots` or an MCP server.
 - **Why.** The tamper check restores and compares only the rendered rules file and the owned hook entries. A verified
   attempt commits the rest of the worker's changes, and the next task's attempt starts from that commit.
-- **What the ingredient does.** Overrides the sandbox mode, the network and the approvals at every launch, and leaves
-  every other key to the repository. Read the changes under `.codex/` in each task commit before you deliver it.
+- **What the ingredient does.** Overrides the sandbox mode and the approvals at every launch, and the network for a
+  worker declared with `network: true`, and leaves every other key to the repository: for a worker declared with
+  `network: false`, a `sandbox_workspace_write.network_access` key in that file decides the network of later attempts.
+  Read the changes under `.codex/` in each task commit before you deliver it.
 
 ### A `raw` entry for another program's event
 
@@ -411,9 +437,9 @@ workers:
 git diff .codex/ AGENTS.md
 ```
 
-The [agentic-coding](../stations/agentic-coding.md) station pins the ingredient and declares the same worker, as
-`codex: { ingredient: codex, role: unattended }`, beside an interactive [`claude`](claude.md) worker, and its
-[implement-task](../recipes/implement-task.md) recipe starts it for each task.
+The [agentic-coding](../stations/agentic-coding.md) station pins the ingredient and declares the worker as
+`codex: { ingredient: codex, role: unattended, network: true }`, beside an interactive [`claude`](claude.md) worker, and
+its [implement-task](../recipes/implement-task.md) recipe starts it for each task.
 
 ### One attempt by hand
 
@@ -423,9 +449,9 @@ In a clean, committed workspace:
 echo "Fix the invoice rounding described in task acme-api-7f2." | ./cook attempt codex --commit
 ```
 
-The attempt starts `codex exec` with the pinned sandbox, the prompt on stdin, and the clone's state directory
-writable. Codex learns from the `verify` block of `AGENTS.md` to run `./cook verify`, whose receipt the attempt replays
-before it commits.
+The attempt starts `codex exec` with the pinned sandbox, the prompt on stdin after the `always` entries of the
+`unattended` role, and the clone's state directory writable. Codex learns from the `verify` block of `AGENTS.md` to run
+`./cook verify`, whose receipt the attempt replays before it commits.
 
 ### A worker that writes the tracker's database
 
