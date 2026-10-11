@@ -1,0 +1,14 @@
+schema: 1
+name: ralph-tui
+version: v0.1.0
+description: ralph-tui, a loop runner that starts a command for each task of a tracker
+checks:
+  version: { run: [ralph-tui, --version], range: ">=0.12 <0.13" }
+  detect: [.ralph-tui/]
+renders:
+  - file: .gitignore
+    block: ralph-tui
+    template: |
+      /.ralph-tui/*
+      !/.ralph-tui/config.toml
+      !/.ralph-tui/templates/

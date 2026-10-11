@@ -1,0 +1,73 @@
+schema: 1
+name: agentic-coding
+version: v0.1.0
+description: an interactive Claude Code and an unattended Codex on git, with ralph-tui making each Beads task a recipe run
+ingredients:
+  - name: git
+    source: github:lmarqs/the-cookbook
+    version: v0.1.0
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000
+  - name: claude
+    source: github:lmarqs/the-cookbook
+    version: v0.1.0
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000
+  - name: codex
+    source: github:lmarqs/the-cookbook
+    version: v0.1.0
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000
+  - name: ralph-tui
+    source: github:lmarqs/the-cookbook
+    version: v0.1.0
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000
+  - name: beads
+    source: github:lmarqs/the-cookbook
+    version: v0.1.0
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000
+stages:
+  vcs: git
+  workers:
+    claude: { ingredient: claude, role: interactive }
+    codex: { ingredient: codex, role: unattended }
+detect: [.beads/, .ralph-tui/]
+entries:
+  .cook/config.yaml:
+    modules: { hooks: true, verify: true }
+    verify:
+      validators:
+        - { when: [".cook/**", AGENTS.md], run: ./cook render --check }
+    context:
+      always:
+        - { file: .agents/directives/unattended.md, for: [unattended] }
+  .cook/policy.yaml:
+    unattended:
+      deny:
+        - [git, [am, cherry-pick, commit, merge, push, rebase, reset, stash, tag, update-ref, worktree]]
+        - [git, ["-C", "-c"]]
+        - [gh]
+        - [bd]
+        - [ralph-tui]
+        - [the-cook, workspace]
+  .cook/hooks.yaml:
+    lifecycle:
+      start:
+        - name: claim-task
+          run: 'BEADS_DIR="$COOK_REPO/.beads" bd update "$COOK_TASK" --status in_progress --assignee "$COOK_ACTOR"'
+          auto: true
+          scope: [task]
+      completed:
+        - name: close-task
+          run: 'BEADS_DIR="$COOK_REPO/.beads" bd close "$COOK_TASK" --reason "verified on $COOK_BRANCH"'
+          auto: true
+          scope: [task]
+      blocked:
+        - name: block-task
+          run: 'BEADS_DIR="$COOK_REPO/.beads" bd update "$COOK_TASK" --status blocked --append-notes "blocked: ${COOK_REASON:-no reason given}"'
+          auto: true
+          scope: [task]
+templates:
+  - { path: .ralph-tui/config.toml, source: files/ralph-tui.toml }
+  - { path: .ralph-tui/templates/beads.hbs, source: files/beads.hbs }
+  - { path: .agents/directives/unattended.md, source: files/unattended.md }
+recipes:
+  - name: implement-task
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000

@@ -1,0 +1,9 @@
+schema: 1
+name: implement-task
+description: Implement one task of the tracker in a workspace of its own
+requires:
+  contracts: [vcs, worker]
+  roles: [unattended]
+workspace: "task-{task}"
+steps:
+  - attempt: {}

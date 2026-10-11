@@ -1,0 +1,20 @@
+schema: 1
+name: python
+version: v0.1.0
+description: the syntax check, pytest lane and post-edit hook of a Python project
+detect: [pyproject.toml, requirements.txt]
+entries:
+  .cook/config.yaml:
+    commands:
+      lint: python3 -m ast {file} > /dev/null
+    verify:
+      app_paths: ["**/*.py", pyproject.toml, setup.cfg, pytest.ini, "requirements*.txt"]
+      lint_paths: ["**/*.py"]
+      lanes:
+        unit:
+          select: python3 -B -m pytest {pattern}
+          full: python3 -B -m pytest
+  .cook/hooks.yaml:
+    post_edit:
+      - paths: ["**/*.py"]
+        run: python3 -m ast {file} > /dev/null

@@ -1,0 +1,7 @@
+schema: 1
+name: skills
+version: v0.1.0
+description: the skills CLI, which installs shared agent skills into .agents/skills
+checks:
+  version: { run: [npx, --no, skills, --version], range: ">=1.7 <1.8" }
+  detect: [skills-lock.json]

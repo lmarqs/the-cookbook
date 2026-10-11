@@ -1,0 +1,26 @@
+schema: 1
+name: node
+version: v0.1.0
+description: the commands, lane and post-edit hook of an npm project
+detect: [package.json]
+entries:
+  .cook/config.yaml:
+    bootstrap: [npm ci]
+    commands:
+      lint: npx --no -- eslint {file}
+      build: npm run build --if-present
+    verify:
+      app_paths:
+        - "**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+        - "**/package.json"
+        - package-lock.json
+        - "**/tsconfig*.json"
+      lint_paths: ["**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"]
+      lanes:
+        unit:
+          select: npm test -- {pattern}
+          full: npm test
+  .cook/hooks.yaml:
+    post_edit:
+      - paths: ["**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"]
+        run: npx --no -- eslint --fix {file}

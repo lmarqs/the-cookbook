@@ -1,0 +1,25 @@
+schema: 1
+name: go
+version: v0.1.0
+description: the commands, lane, validator and post-edit hook of a Go module
+detect: [go.mod]
+entries:
+  .cook/config.yaml:
+    bootstrap: [go mod download]
+    commands:
+      lint: gofmt -d {file}
+      build: go build -o /dev/null ./...
+    verify:
+      app_paths: ["**/*.go", "**/go.mod", "**/go.sum", "**/testdata/**"]
+      lint_paths: ["**/*.go"]
+      lanes:
+        unit:
+          select: go test {pattern}
+          full: go test ./...
+      validators:
+        - when: [go.mod, go.sum]
+          run: go mod tidy -diff
+  .cook/hooks.yaml:
+    post_edit:
+      - paths: ["**/*.go"]
+        run: gofmt -w {file}

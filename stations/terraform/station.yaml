@@ -1,0 +1,31 @@
+schema: 1
+name: terraform
+version: v0.1.0
+description: the format command, validate and plan lanes and post-edit hook of a Terraform configuration
+detect: ["**/*.tf"]
+entries:
+  .cook/config.yaml:
+    commands:
+      lint: terraform fmt -check -diff -no-color {file}
+    verify:
+      app_paths:
+        - "**/*.tf"
+        - "**/*.tf.json"
+        - "**/*.tfvars"
+        - "**/*.tfvars.json"
+        - "**/*.tftest.hcl"
+        - "**/.terraform.lock.hcl"
+      lint_paths: ["**/*.tf", "**/*.tfvars", "**/*.tftest.hcl"]
+      lanes:
+        validate:
+          select: >-
+            terraform -chdir={pattern} init -backend=false -input=false -no-color > /dev/null &&
+            terraform -chdir={pattern} validate -no-color
+        plan:
+          select: >-
+            terraform -chdir={pattern} init -input=false -no-color > /dev/null &&
+            terraform -chdir={pattern} plan -input=false -lock=false -no-color
+  .cook/hooks.yaml:
+    post_edit:
+      - paths: ["**/*.tf", "**/*.tfvars", "**/*.tftest.hcl"]
+        run: terraform fmt -no-color {file}

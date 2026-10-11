@@ -1,0 +1,10 @@
+schema: 1
+name: mise
+version: v0.1.0
+description: mise, a tool-version manager and task runner
+checks:
+  version: { run: [mise, --version], range: ">=2026.6 <2026.7" }
+  detect: [mise.toml, .mise.toml, mise-tasks/, .mise-tasks/, .mise/tasks/, mise/tasks/, .config/mise/tasks/]
+floor:
+  deny:
+    - "mise * ::: *"

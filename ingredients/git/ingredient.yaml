@@ -1,0 +1,70 @@
+schema: 1
+name: git
+version: v0.1.0
+description: git, the version control system
+contract: { name: vcs, version: 1 }
+checks:
+  version: { run: [git, --version], range: ">=2.23 <3.0" }
+  detect: [.git]
+floor:
+  deny:
+    - [git, push, ["--force", "--force-with-lease", "-f"], origin, ["{default_branch}", "HEAD:{default_branch}"]]
+    - [git, push, origin, ["+{default_branch}", "+HEAD:{default_branch}"]]
+    - "git push origin {default_branch} --force*"
+    - "git push origin {default_branch} -f*"
+    - "git push origin HEAD:{default_branch} --force*"
+    - "git push origin HEAD:{default_branch} -f*"
+operations:
+  head: { run: [git, rev-parse, --verify, HEAD] }
+  root: { run: [git, rev-parse, --show-toplevel] }
+  primary_root:
+    run: [sh, -c, 'dir=$(git rev-parse --git-common-dir) && cd "$dir/.." && pwd -P']
+  branch: { run: [git, branch, --show-current] }
+  default_branch:
+    run:
+      - sh
+      - -c
+      - >-
+        git rev-parse --git-dir >/dev/null || exit 1;
+        if ref=$(git symbolic-ref -q refs/remotes/origin/HEAD); then echo "${ref#refs/remotes/origin/}";
+        elif git remote get-url origin >/dev/null 2>&1;
+        then echo "refs/remotes/origin/HEAD is not set: run git remote set-head origin --auto" >&2; exit 1;
+        else b=$(git config --get init.defaultBranch) && git show-ref --verify -q "refs/heads/$b" && echo "$b"; fi
+  show: { run: [git, cat-file, blob, "{rev}:{path}"] }
+  clean:
+    run: [sh, -c, 'out=$(git status --porcelain --untracked-files=normal) && test -z "$out"']
+  tracked: { run: [git, --literal-pathspecs, ls-files, --error-unmatch, --, "{path}"] }
+  changed:
+    run:
+      - sh
+      - -c
+      - >-
+        git -c core.quotePath=false diff --name-only --no-renames "$1" -- &&
+        git -c core.quotePath=false ls-files --others --exclude-standard
+      - sh
+      - "{rev}"
+  patch:
+    run:
+      - sh
+      - -c
+      - >-
+        git add --all --intent-to-add &&
+        git diff --binary --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ "$1" --
+      - sh
+      - "{rev}"
+  merge_base: { run: [git, merge-base, "{a}", "{b}"] }
+  landed:
+    run: [sh, -c, 'out=$(git cherry "$1" "$2") && printf "%s\n" "$out" | sed -n "s/^+ //p"', sh, "{target}", "{branch}"]
+  reset:
+    run: [sh, -c, 'git reset --hard "$1" && git clean -fd', sh, "{rev}"]
+  commit:
+    run: [sh, -c, 'git add --all && git commit -m "$1"', sh, "{message}"]
+  update: { run: [git, fetch, origin] }
+  branch_create: { run: [git, branch, "{branch}", "{rev}"] }
+  switch: { run: [git, switch, "{branch}"] }
+  workspace_add:
+    run: [git, -c, core.hooksPath=/dev/null, worktree, add, -b, "{branch}", "{path}", "{rev}"]
+  workspace_remove: { run: [git, worktree, remove, "{path}"] }
+renders:
+  - { file: .gitignore, block: state, template: "/{{state_dir}}/" }
+  - { file: .gitignore, block: workspaces, template: "/{{workspaces_dir}}/" }

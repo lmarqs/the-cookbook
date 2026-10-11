@@ -1,0 +1,23 @@
+{{=<% %>=}}
+COOK_TASK_ID={{taskId}}
+# {{taskTitle}}
+{{#if taskDescription}}
+
+{{taskDescription}}
+{{/if}}
+{{#if acceptanceCriteria}}
+
+## Acceptance criteria
+
+{{acceptanceCriteria}}
+{{/if}}
+{{#if epicId}}
+
+This task belongs to the epic {{epicId}}{{#if prdName}}, {{prdName}}{{/if}}.
+{{/if}}
+{{#if prdContent}}
+
+## The epic's product requirements
+
+{{prdContent}}
+{{/if}}

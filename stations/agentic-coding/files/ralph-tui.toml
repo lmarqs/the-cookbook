@@ -1,0 +1,39 @@
+# Written once by the agentic-coding station of github:lmarqs/the-cookbook, and the repository's own file from then on.
+# docs/stations/agentic-coding.md in that cookbook explains each key.
+configVersion = "2.1"
+tracker = "beads"
+agent = "implement-task"
+autoCommit = false
+maxIterations = 10
+
+[errorHandling]
+strategy = "skip"
+
+[parallel]
+mode = "never"
+
+[sandbox]
+enabled = false
+
+[[agents]]
+name = "implement-task"
+plugin = "codex"
+command = "bash"
+defaultFlags = [
+  "-c",
+  '''
+IFS= read -r marker
+case "$marker" in
+  COOK_TASK_ID=?*) task=${marker#COOK_TASK_ID=} ;;
+  *)
+    echo "implement-task: the prompt does not start with COOK_TASK_ID=<id>; see .ralph-tui/templates/beads.hbs" >&2
+    exit 1
+    ;;
+esac
+exec ./cook make implement-task --task "$task" --unattended --commit --withhold '<promise>COMPLETE</promise>'
+''',
+  "implement-task",
+]
+
+[agents.rateLimitHandling]
+enabled = false
